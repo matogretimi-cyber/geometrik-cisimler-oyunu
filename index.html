@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Geometrik Cisimler Oyunu</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: linear-gradient(#bdefff, #fff4b8);
+  overflow: hidden;
+  user-select: none;
+}
+
+header {
+  height: 95px;
+  text-align: center;
+  background: #ffd43b;
+  border-bottom: 6px solid #ff922b;
+  padding: 10px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 34px;
+  color: #263238;
+}
+
+#info {
+  font-size: 25px;
+  font-weight: bold;
+  color: #264653;
+}
+
+#gameArea {
+  position: relative;
+  height: calc(100vh - 235px);
+  overflow: hidden;
+}
+
+#message {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  border: 5px solid #2a9d8f;
+  border-radius: 24px;
+  padding: 14px 28px;
+  font-size: 30px;
+  font-weight: bold;
+  color: #2a9d8f;
+  z-index: 50;
+  display: none;
+}
+
+.shape {
+  position: absolute;
+  width: 135px;
+  height: 120px;
+  cursor: grab;
+  touch-action: none;
+  z-index: 10;
+}
+
+.shape svg {
+  width: 135px;
+  height: 120px;
+  display: block;
+}
+
+#baskets {
+  height: 140px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  background: #f4a261;
+  border-top: 6px solid #e76f51;
+}
+
+.basket {
+  width: 30%;
+  height: 110px;
+  background: white;
+  border: 5px solid #264653;
+  border-radius: 22px;
+  text-align: center;
+  font-size: 26px;
+  font-weight: bold;
+  padding-top: 30px;
+  color: #264653;
+}
+
+.basket.hover {
+  background: #d8f3dc;
+  transform: scale(1.05);
+}
+
+#endScreen {
+  position: fixed;
+  inset: 0;
+  background: rgba(255, 247, 194, 0.97);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  z-index: 100;
+}
+
+#endBox {
+  background: white;
+  border: 7px solid #2a9d8f;
+  border-radius: 30px;
+  padding: 40px;
+  font-size: 34px;
+}
+
+button {
+  font-size: 26px;
+  padding: 15px 28px;
+  border: none;
+  border-radius: 18px;
+  background: #2a9d8f;
+  color: white;
+  cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>Geometrik Cisimler Sepet Oyunu</h1>
+  <div id="info">
+    Puan: <span id="score">0</span> |
+    Kalan Nesne: <span id="left">25</span>
+  </div>
+</header>
+
+<div id="gameArea">
+  <div id="message"></div>
+</div>
+
+<div id="baskets">
+  <div class="basket" data-type="prizma">Prizma Sepeti</div>
+  <div class="basket" data-type="silindir">Silindir Sepeti</div>
+  <div class="basket" data-type="küre">Küre Sepeti</div>
+</div>
+
+<div id="endScreen">
+  <div id="endBox">
+    <h2>Oyun Bitti!</h2>
+    <p>Toplam Puanın: <strong id="finalScore"></strong></p>
+    <button onclick="location.reload()">Tekrar Oyna</button>
+  </div>
+</div>
+
+<script>
+/*
+  25 günlük yaşam nesnesi vardır.
+  Nesne adları ekranda yazmaz.
+  Öğrenci nesnenin biçimine göre doğru sepete sürükler.
+  Her doğru cevap 4 puandır.
+*/
+
+const gameArea = document.getElementById("gameArea");
+const scoreText = document.getElementById("score");
+const leftText = document.getElementById("left");
+const message = document.getElementById("message");
+const baskets = document.querySelectorAll(".basket");
+
+let score = 0;
+let completed = 0;
+let fallTimer = null;
+
+const feedbacks = [
+  "Harika!",
+  "Bravo!",
+  "Çok iyi gidiyorsun!",
+  "Doğru sepete yerleştirdin!",
+  "Süpersin!"
+];
+
+const shapes = [
+  // Prizma örnekleri
+  { type: "prizma", draw: "fridge" },
+  { type: "prizma", draw: "milkBox" },
+  { type: "prizma", draw: "rubik" },
+  { type: "prizma", draw: "dice" },
+  { type: "prizma", draw: "tent" },
+  { type: "prizma", draw: "triangleChocolate" },
+  { type: "prizma", draw: "book" },
+  { type: "prizma", draw: "folder" },
+  { type: "prizma", draw: "eraser" },
+  { type: "prizma", draw: "lego" },
+  { type: "prizma", draw: "aquarium" },
+
+  // Silindir örnekleri
+  { type: "silindir", draw: "battery" },
+  { type: "silindir", draw: "can" },
+  { type: "silindir", draw: "drum" },
+  { type: "silindir", draw: "pencilCase" },
+  { type: "silindir", draw: "paperTowel" },
+  { type: "silindir", draw: "redDrinkCan" },
+  { type: "silindir", draw: "deodorant" },
+
+  // Küre örnekleri
+  { type: "küre", draw: "basketball" },
+  { type: "küre", draw: "tennisBall" },
+  { type: "küre", draw: "orange" },
+  { type: "küre", draw: "football" },
+  { type: "küre", draw: "worldSphere" },
+  { type: "küre", draw: "beachBall" },
+  { type: "küre", draw: "marble" }
+];
+
+shuffle(shapes);
+leftText.textContent = shapes.length;
+
+function shuffle(array) {
+  array.sort(() => Math.random() - 0.5);
+}
+
+function showMessage(text, color = "#2a9d8f") {
+  message.textContent = text;
+  message.style.color = color;
+  message.style.borderColor = color;
+  message.style.display = "block";
+
+  setTimeout(() => {
+    message.style.display = "none";
+  }, 1400);
+}
+
+function speak(text) {
+  if ("speechSynthesis" in window) {
+    speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "tr-TR";
+    utterance.rate = 0.9;
+    utterance.pitch = 1.2;
+    speechSynthesis.speak(utterance);
+  }
+}
+
+function applauseSound() {
+  const audio = new (window.AudioContext || window.webkitAudioContext)();
+
+  for (let i = 0; i < 18; i++) {
+    const osc = audio.createOscillator();
+    const gain = audio.createGain();
+
+    osc.type = "square";
+    osc.frequency.value = 700 + Math.random() * 700;
+
+    gain.gain.setValueAtTime(0.18, audio.currentTime + i * 0.045);
+    gain.gain.exponentialRampToValueAtTime(
+      0.001,
+      audio.currentTime + i * 0.045 + 0.055
+    );
+
+    osc.connect(gain);
+    gain.connect(audio.destination);
+
+    osc.start(audio.currentTime + i * 0.045);
+    osc.stop(audio.currentTime + i * 0.045 + 0.055);
+  }
+}
+
+function wrongSound() {
+  const audio = new (window.AudioContext || window.webkitAudioContext)();
+  const osc = audio.createOscillator();
+  const gain = audio.createGain();
+
+  osc.type = "sine";
+  osc.frequency.value = 160;
+  gain.gain.value = 0.15;
+
+  osc.connect(gain);
+  gain.connect(audio.destination);
+
+  osc.start();
+  osc.stop(audio.currentTime + 0.35);
+}
+
+function svg(draw) {
+  const items = {
+    fridge: `<rect x="35" y="10" width="65" height="100" rx="6" fill="#dbeafe" stroke="#333" stroke-width="3"/><line x1="35" y1="50" x2="100" y2="50" stroke="#333" stroke-width="3"/><circle cx="90" cy="35" r="3"/><circle cx="90" cy="75" r="3"/>`,
+    milkBox: `<polygon points="35,25 75,25 95,45 55,45" fill="#fff" stroke="#333" stroke-width="3"/><polygon points="55,45 95,45 95,105 55,105" fill="#a5d8ff" stroke="#333" stroke-width="3"/><polygon points="35,25 55,45 55,105 35,85" fill="#74c0fc" stroke="#333" stroke-width="3"/>`,
+    rubik: `<rect x="30" y="25" width="75" height="75" fill="#ffd43b" stroke="#333" stroke-width="3"/><line x1="55" y1="25" x2="55" y2="100" stroke="#333" stroke-width="3"/><line x1="80" y1="25" x2="80" y2="100" stroke="#333" stroke-width="3"/><line x1="30" y1="50" x2="105" y2="50" stroke="#333" stroke-width="3"/><line x1="30" y1="75" x2="105" y2="75" stroke="#333" stroke-width="3"/><rect x="55" y="50" width="25" height="25" fill="#69db7c"/><rect x="80" y="25" width="25" height="25" fill="#ff6b6b"/>`,
+    dice: `<rect x="35" y="25" width="70" height="70" rx="8" fill="#fff" stroke="#333" stroke-width="3"/><circle cx="55" cy="45" r="5"/><circle cx="85" cy="45" r="5"/><circle cx="70" cy="60" r="5"/><circle cx="55" cy="75" r="5"/><circle cx="85" cy="75" r="5"/>`,
+    tent: `<polygon points="25,95 70,20 115,95" fill="#ff922b" stroke="#333" stroke-width="3"/><polygon points="70,20 115,95 95,95 70,55" fill="#ffa94d" stroke="#333" stroke-width="3"/><line x1="70" y1="55" x2="50" y2="95" stroke="#333" stroke-width="3"/>`,
+    triangleChocolate: `<polygon points="25,85 60,35 100,85" fill="#8b4513" stroke="#333" stroke-width="3"/><polygon points="60,35 110,45 125,90 100,85" fill="#a0522d" stroke="#333" stroke-width="3"/><polygon points="25,85 100,85 125,90 50,95" fill="#c07a3d" stroke="#333" stroke-width="3"/>`,
+    book: `<polygon points="30,25 95,35 95,100 30,90" fill="#4dabf7" stroke="#333" stroke-width="3"/><polygon points="40,35 105,45 95,35 30,25" fill="#74c0fc" stroke="#333" stroke-width="3"/>`,
+    folder: `<path d="M25 35 H60 L70 48 H110 V100 H25 Z" fill="#ffd43b" stroke="#333" stroke-width="3"/>`,
+    eraser: `<polygon points="30,45 80,30 110,55 60,75" fill="#ffc9c9" stroke="#333" stroke-width="3"/><polygon points="60,75 110,55 110,75 60,95" fill="#ff8787" stroke="#333" stroke-width="3"/>`,
+    lego: `<rect x="25" y="45" width="90" height="45" rx="5" fill="#fa5252" stroke="#333" stroke-width="3"/><circle cx="45" cy="43" r="9" fill="#ff8787" stroke="#333" stroke-width="3"/><circle cx="70" cy="43" r="9" fill="#ff8787" stroke="#333" stroke-width="3"/><circle cx="95" cy="43" r="9" fill="#ff8787" stroke="#333" stroke-width="3"/>`,
+    aquarium: `<rect x="25" y="30" width="90" height="65" rx="4" fill="#a5d8ff" stroke="#333" stroke-width="3"/><path d="M25 70 Q50 60 75 70 T115 70" fill="none" stroke="#1971c2" stroke-width="3"/><circle cx="65" cy="60" r="8" fill="#ff922b"/><polygon points="57,60 45,52 45,68" fill="#ff922b"/>`,
+
+    battery: `<rect x="45" y="20" width="45" height="85" rx="8" fill="#74c0fc" stroke="#333" stroke-width="3"/><rect x="57" y="10" width="20" height="12" fill="#333"/><ellipse cx="67" cy="25" rx="22" ry="8" fill="#a5d8ff" stroke="#333" stroke-width="3"/>`,
+    can: `<ellipse cx="70" cy="25" rx="32" ry="12" fill="#dee2e6" stroke="#333" stroke-width="3"/><rect x="38" y="25" width="64" height="70" fill="#adb5bd" stroke="#333" stroke-width="3"/><ellipse cx="70" cy="95" rx="32" ry="12" fill="#868e96" stroke="#333" stroke-width="3"/>`,
+    drum: `<ellipse cx="70" cy="25" rx="38" ry="13" fill="#74c0fc" stroke="#333" stroke-width="3"/><rect x="32" y="25" width="76" height="75" fill="#339af0" stroke="#333" stroke-width="3"/><ellipse cx="70" cy="100" rx="38" ry="13" fill="#1c7ed6" stroke="#333" stroke-width="3"/><path d="M35 55 Q70 70 105 55" stroke="#fff" stroke-width="4" fill="none"/>`,
+    pencilCase: `<ellipse cx="70" cy="30" rx="38" ry="13" fill="#ffd43b" stroke="#333" stroke-width="3"/><rect x="32" y="30" width="76" height="55" fill="#fcc419" stroke="#333" stroke-width="3"/><ellipse cx="70" cy="85" rx="38" ry="13" fill="#fab005" stroke="#333" stroke-width="3"/><line x1="45" y1="55" x2="95" y2="55" stroke="#333" stroke-width="3"/><circle cx="78" cy="55" r="4"/>`,
+    paperTowel: `<ellipse cx="70" cy="20" rx="30" ry="10" fill="#fff" stroke="#333" stroke-width="3"/><rect x="40" y="20" width="60" height="80" fill="#f8f9fa" stroke="#333" stroke-width="3"/><ellipse cx="70" cy="100" rx="30" ry="10" fill="#e9ecef" stroke="#333" stroke-width="3"/><line x1="52" y1="25" x2="52" y2="95" stroke="#ced4da" stroke-width="2"/><line x1="88" y1="25" x2="88" y2="95" stroke="#ced4da" stroke-width="2"/>`,
+    redDrinkCan: `<ellipse cx="70" cy="25" rx="31" ry="11" fill="#ff8787" stroke="#333" stroke-width="3"/><rect x="39" y="25" width="62" height="70" fill="#e03131" stroke="#333" stroke-width="3"/><ellipse cx="70" cy="95" rx="31" ry="11" fill="#c92a2a" stroke="#333" stroke-width="3"/><path d="M48 60 Q70 45 92 60" stroke="#fff" stroke-width="6" fill="none"/>`,
+    deodorant: `<ellipse cx="70" cy="25" rx="26" ry="10" fill="#ced4da" stroke="#333" stroke-width="3"/><rect x="44" y="25" width="52" height="75" fill="#845ef7" stroke="#333" stroke-width="3"/><ellipse cx="70" cy="100" rx="26" ry="10" fill="#7048e8" stroke="#333" stroke-width="3"/><rect x="52" y="10" width="36" height="15" fill="#adb5bd" stroke="#333" stroke-width="3"/>`,
+
+    basketball: `<circle cx="70" cy="60" r="42" fill="#f08c00" stroke="#333" stroke-width="3"/><path d="M28 60 H112 M70 18 V102 M40 30 Q70 60 40 90 M100 30 Q70 60 100 90" stroke="#333" stroke-width="3" fill="none"/>`,
+    tennisBall: `<circle cx="70" cy="60" r="42" fill="#ccff33" stroke="#333" stroke-width="3"/><path d="M40 25 Q70 60 40 95 M100 25 Q70 60 100 95" stroke="#fff" stroke-width="5" fill="none"/>`,
+    orange: `<circle cx="70" cy="63" r="40" fill="#ff922b" stroke="#333" stroke-width="3"/><path d="M68 22 Q75 10 88 18" stroke="#2f9e44" stroke-width="5" fill="none"/>`,
+    football: `<circle cx="70" cy="60" r="42" fill="#fff" stroke="#333" stroke-width="3"/><polygon points="70,42 86,54 80,74 60,74 54,54" fill="#333"/><path d="M70 42 L70 20 M86 54 L110 50 M80 74 L95 95 M60 74 L45 95 M54 54 L30 50" stroke="#333" stroke-width="3"/>`,
+    worldSphere: `<circle cx="70" cy="60" r="42" fill="#4dabf7" stroke="#333" stroke-width="3"/><path d="M45 45 Q60 25 78 42 Q70 55 88 62 Q70 75 50 68 Z" fill="#69db7c"/><path d="M85 25 Q105 45 92 70 Q78 60 88 45 Z" fill="#69db7c"/>`,
+    beachBall: `<circle cx="70" cy="60" r="42" fill="#fff" stroke="#333" stroke-width="3"/><path d="M70 18 Q40 40 70 60 Q100 80 70 102" fill="#ff6b6b" stroke="#333" stroke-width="2"/><path d="M70 18 Q100 40 70 60 Q40 80 70 102" fill="#74c0fc" stroke="#333" stroke-width="2"/>`,
+    marble: `<circle cx="70" cy="60" r="34" fill="#b197fc" stroke="#333" stroke-width="3"/><path d="M45 55 Q65 35 92 50 Q70 65 95 80 Q65 78 45 55" fill="#fff" opacity="0.8"/>`
+  };
+
+  return `<svg viewBox="0 0 140 120">${items[draw]}</svg>`;
+}
+
+function spawnShape(shapeData) {
+  const el = document.createElement("div");
+  el.className = "shape";
+  el.dataset.type = shapeData.type;
+  el.innerHTML = svg(shapeData.draw);
+
+  el.style.left = Math.random() * (gameArea.clientWidth - 140) + "px";
+  el.style.top = "-130px";
+
+  gameArea.appendChild(el);
+  makeDraggable(el);
+  startFalling(el);
+}
+
+function startFalling(el) {
+  clearInterval(fallTimer);
+
+  fallTimer = setInterval(() => {
+    if (!el.isDragging) {
+      let top = parseFloat(el.style.top);
+      el.style.top = top + 1.6 + "px";
+
+      if (top > gameArea.clientHeight - 120) {
+        el.style.top = "-130px";
+        el.style.left = Math.random() * (gameArea.clientWidth - 140) + "px";
+      }
+    }
+  }, 20);
+}
+
+function makeDraggable(el) {
+  let shiftX = 0;
+  let shiftY = 0;
+
+  el.addEventListener("pointerdown", e => {
+    el.isDragging = true;
+    el.setPointerCapture(e.pointerId);
+
+    const rect = el.getBoundingClientRect();
+    shiftX = e.clientX - rect.left;
+    shiftY = e.clientY - rect.top;
+
+    el.style.zIndex = 99;
+  });
+
+  el.addEventListener("pointermove", e => {
+    if (!el.isDragging) return;
+
+    const areaRect = gameArea.getBoundingClientRect();
+    el.style.left = e.clientX - shiftX + "px";
+    el.style.top = e.clientY - shiftY - areaRect.top + "px";
+
+    baskets.forEach(b => b.classList.remove("hover"));
+
+    const basket = getBasketUnderPointer(e.clientX, e.clientY);
+    if (basket) basket.classList.add("hover");
+  });
+
+  el.addEventListener("pointerup", e => {
+    el.isDragging = false;
+    el.style.zIndex = 10;
+
+    baskets.forEach(b => b.classList.remove("hover"));
+
+    const basket = getBasketUnderPointer(e.clientX, e.clientY);
+    if (basket) checkAnswer(el, basket);
+  });
+}
+
+function getBasketUnderPointer(x, y) {
+  for (const basket of baskets) {
+    const r = basket.getBoundingClientRect();
+
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+      return basket;
+    }
+  }
+  return null;
+}
+
+function checkAnswer(el, basket) {
+  if (el.dataset.type === basket.dataset.type) {
+    clearInterval(fallTimer);
+
+    const feedback = feedbacks[Math.floor(Math.random() * feedbacks.length)];
+
+    applauseSound();
+    speak(feedback);
+
+    score += 4;
+    completed++;
+
+    scoreText.textContent = score;
+    leftText.textContent = shapes.length - completed;
+
+    showMessage(feedback);
+
+    el.remove();
+
+    setTimeout(() => {
+      if (completed >= shapes.length) {
+        endGame();
+      } else {
+        spawnShape(shapes[completed]);
+      }
+    }, 900);
+
+  } else {
+    wrongSound();
+    speak("Tekrar düşünelim.");
+    showMessage("Tekrar düşünelim!", "#e63946");
+
+    el.style.top = "-130px";
+    el.style.left = Math.random() * (gameArea.clientWidth - 140) + "px";
+  }
+}
+
+function endGame() {
+  speak("Oyun bitti. Harika iş çıkardın!");
+  document.getElementById("finalScore").textContent = score;
+  document.getElementById("endScreen").style.display = "flex";
+}
+
+spawnShape(shapes[0]);
+</script>
+
+</body>
+</html>
